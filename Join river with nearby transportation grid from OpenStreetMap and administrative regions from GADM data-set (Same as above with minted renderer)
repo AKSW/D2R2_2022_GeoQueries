@@ -1,0 +1,102 @@
+SELECT 
+?geom 
+?geomColor 
+("http://ows.mundialis.de/services/service?" AS ?mapEndpoint) 
+{
+  SERVICE <cache:https://coypu-fuseki.aksw.org/osm/sparql> {
+    {
+      BIND("rgb(43,131,186)" AS ?geomColor)
+      {
+        SELECT (geof:lineMerge(geof:collect(?lit)) AS ?geom) WHERE {
+          ?s a osm:relation .
+          ?s osmkey:name:de "Elbe" .
+          ?s osmrel:member/osm:id ?m .
+          ?m geo:hasGeometry/geo:asWKT ?lit
+        }
+      }
+    } 
+    UNION
+    {
+      BIND("rgb(253,174,97)" AS ?geomColor)
+      {
+        SELECT (geof:lineMerge(geof:collect(?lit)) AS ?river_geom) WHERE {
+          ?s a osm:relation .
+          ?s osmkey:name:de "Elbe" .
+          ?s osmrel:member/osm:id ?m .
+          ?m geo:hasGeometry/geo:asWKT ?lit
+        }
+      }
+      BIND(spatialF:transformSRS(geof:buffer(
+                spatialF:transformSRS(?river_geom,
+                                      <http://www.opengis.net/def/crs/EPSG/0/5243>),
+                  "1"^^xsd:double, <http://www.opengis.net/def/uom/OGC/1.0/kilometer>),
+             <http://www.opengis.net/def/crs/OGC/1.3/CRS84>) AS ?geom)
+    } 
+    UNION
+    {
+      BIND("rgb(64,64,64)" AS ?geomColor)
+      {
+        SELECT (geof:lineMerge(geof:collect(?lit)) AS ?river_lit) WHERE {
+          ?s a osm:relation .
+          ?s osmkey:name:de "Elbe" .
+          ?s osmrel:member/osm:id ?m .
+          ?m geo:hasGeometry/geo:asWKT ?lit
+        }
+      }
+      BIND(spatialF:transformSRS(geof:buffer(
+               spatialF:transformSRS(?river_lit,
+                                     <http://www.opengis.net/def/crs/EPSG/0/5243>),
+               "1"^^xsd:double, <http://www.opengis.net/def/uom/OGC/1.0/kilometer>),
+             <http://www.opengis.net/def/crs/OGC/1.3/CRS84>) AS ?lit)
+      SERVICE <http://localhost/gadm/sparql> {
+        GRAPH <https://data.coypu.org/adm2> {
+          ?adm spatial:intersectBoxGeom(?lit) .
+          ?adm geo:hasGeometry/geo:asGML ?adm_geom_lit_ .
+          FILTER(geof:sfIntersects(?lit, ?adm_geom_lit_))
+          BIND(spatialF:transformSRS(geof:simplifyDp(?adm_geom_lit_, "0.0001"^^xsd:double),
+                 <http://www.opengis.net/def/crs/OGC/1.3/CRS84>) AS ?geom)
+        }
+      }
+    }
+    UNION
+    {
+      {
+        SELECT (geof:lineMerge(geof:collect(?rail_geom)) AS ?geom) ?type {
+          {
+            SELECT (geof:lineMerge(geof:collect(?lit)) AS ?river_lit) WHERE {
+              ?s a osm:relation .
+              ?s osmkey:name:de "Elbe" .
+              ?s osmrel:member/osm:id ?m .
+              ?m geo:hasGeometry/geo:asWKT ?lit
+            }
+          }
+          BIND(spatialF:transformSRS(geof:buffer(
+                   spatialF:transformSRS(?river_lit,
+                                         <http://www.opengis.net/def/crs/EPSG/0/5243>),
+                   "1"^^xsd:double, <http://www.opengis.net/def/uom/OGC/1.0/kilometer>),
+                 <http://www.opengis.net/def/crs/OGC/1.3/CRS84>) AS ?lit)
+          SERVICE <http://localhost/gadm/sparql> {
+            GRAPH <https://data.coypu.org/adm2> {
+              ?adm spatial:intersectBoxGeom(?lit) .
+              ?adm geo:hasGeometry/geo:asGML ?adm_geom_lit_ .
+              FILTER(geof:sfIntersects(?lit, ?adm_geom_lit_))
+              BIND(spatialF:transformSRS(
+                     geof:simplifyDp(?adm_geom_lit_, "0.0001"^^xsd:double),
+                     <http://www.opengis.net/def/crs/OGC/1.3/CRS84>) AS ?adm_geom)
+            }
+          }
+          ?rail spatial:withinBoxGeom(?adm_geom) .
+          ?rail a osm:way .
+          {
+            ?rail osmkey:highway "motorway" BIND(1 AS ?type)
+          } UNION {
+            ?rail osmkey:railway "rail" BIND(2 AS ?type)
+          } 
+          ?rail geo:hasGeometry/geo:asWKT ?rail_geom .
+          FILTER(geof:sfIntersects(?adm_geom, ?rail_geom))
+        } GROUP BY ?adm_geom ?type
+      }
+      BIND(if(?type=1, "rgb(202,0,32)", "rgb(94,60,153)") AS ?geomColor)
+    }
+  }
+}
