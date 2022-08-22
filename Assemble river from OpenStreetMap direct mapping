@@ -1,0 +1,15 @@
+SELECT 
+?geom 
+?geomColor 
+WHERE
+{
+  BIND("rgb(43,131,186)" AS ?geomColor)
+  {
+    SELECT (geof:lineMerge(geof:collect(?lit)) AS ?geom) WHERE {
+      ?s a osm:relation .
+      ?s osmkey:name:de "Elbe" .
+      ?s osmrel:member/osm:id ?m .
+      ?m geo:hasGeometry/geo:asWKT ?lit
+    }
+  }
+}
