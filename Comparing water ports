@@ -1,0 +1,43 @@
+SELECT 
+*
+{
+  SERVICE <cache:https://coypu-fuseki.aksw.org/osm/sparql> {
+    {
+      SELECT 
+      ?sub 
+      (?geom_ AS ?geom)
+      (geof:aggUnion(?osm_geom) AS ?tmp) 
+      (count(?osm) AS ?cnt)
+      (count(?osm_geom) AS ?geomx_count)
+      ?geomTooltip
+      (if(?geomx_count > 0,if(?acc="accurate","red","orange"),
+                           if(?acc!="accurate","gray","blue")) AS ?geomColor)
+      (if(?geomx_count > 0, ?tmp, coalesce()) AS ?geomx)
+      (?geomTooltip AS ?geomxTooltip)
+      ?code_
+      ?acc
+      {
+        SERVICE <http://cmemp/implisense> {
+          SELECT * {
+            ?sub a coy:Port .
+            ?sub rdfs:label ?geomTooltip .
+            ?sub geo:hasGeometry/geo:asWKT ?geom_ .
+            OPTIONAL {
+              ?sub ports:hasLocode ?code_ .
+            }
+            OPTIONAL {
+              ?sub ports:hasLocationPrecision ?acc .
+            }
+          }
+          ORDER BY rand()
+        }
+        OPTIONAL {
+          ?osm osmkey:industrial "port" .
+          ?osm spatial:nearbyGeom(?geom_ 3).
+          ?osm geo:hasGeometry/geo:asWKT ?osm_geom .
+        }
+      } 
+      GROUP BY ?sub ?geomTooltip ?code_ ?geom_ ?acc
+    }
+  }
+}
