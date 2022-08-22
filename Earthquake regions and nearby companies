@@ -1,0 +1,96 @@
+SELECT 
+?conture_geom
+?conture_geomColor
+?c_geom
+WHERE {
+  {
+    SELECT
+    ?event_name 
+    ?event_geom 
+    (?event_name AS ?event_geomTooltip)
+    ?conture_geom
+    ?conture_geomColor
+    {
+      # get n significant earthquakes from latest monthly dump 
+      {
+        SELECT ?event_json {
+      <https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_month.geojson>
+            url:text ?txt .
+          BIND(strdt(?txt, xsd:json) AS ?json)
+          BIND(json:path(?json, "$.features") AS ?features)
+          ?features json:unnest (?event_json) .
+        } LIMIT 20
+      }
+      # the name
+      BIND(json:path(?event_json, "$.properties.place") AS ?event_name)
+      # the geometry
+      BIND(strdt(str(?event_json), geo:geoJSONLiteral) AS ?event_geojson)
+      BIND(spatialF:transformDatatype(?event_geojson, geo:wktLiteral) AS ?event_geom)
+      # get details JSON
+      BIND(iri(json:path(?event_json, "$.properties.detail")) AS ?detail_url)
+      ?detail_url url:text ?detail_txt .
+      BIND(strdt(?detail_txt, xsd:json) AS ?detail_json)
+      # get the shakemap
+      BIND(json:path(?detail_json, "$.properties.products.shakemap") AS ?shakemap_arr)
+      ?shakemap_arr json:unnest (?shakemap 0) .
+      # get MMI contures from shakemap
+      BIND(iri(json:path(?shakemap, "$.contents.['download/cont_mmi.json'].url"))
+        AS ?contures_url)
+      ?contures_url url:text ?contures_txt .
+      BIND(strdt(?contures_txt, xsd:json) AS ?contures_json_)
+      BIND(json:js("function (x) {delete x.crs; return x;}", ?contures_json_)
+        AS ?contures_json) # remove CRS from GeoJSON
+      BIND(json:path(?contures_json, "$.features") AS ?conture_features_arr)
+      ?conture_features_arr json:unnest (?conture_line) .
+      BIND(strdt(str(?conture_line), geo:geoJSONLiteral) AS ?conture_geojson)
+      BIND(spatialF:transformDatatype(?conture_geojson, geo:wktLiteral) AS ?conture_geom)
+      BIND(json:path(?conture_line, "$.properties.color") AS ?conture_geomColor) 
+    } 
+  }
+  UNION {
+    SELECT DISTINCT ?c_geom {
+      {
+        SELECT
+        ?conture_geom
+        {
+          # get n significant earthquakes from latest monthly dump 
+          {
+            SELECT ?event_json {
+      <https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_month.geojson>
+                url:text ?txt .
+              BIND(strdt(?txt, xsd:json) AS ?json)
+              BIND(json:path(?json, "$.features") AS ?features)
+              ?features json:unnest (?event_json) .
+            } LIMIT 20
+          }
+          # the name
+          BIND(json:path(?event_json, "$.properties.place") AS ?event_name)
+          # the geometry
+          BIND(strdt(str(?event_json), geo:geoJSONLiteral) AS ?event_geojson)
+          BIND(spatialF:transformDatatype(?event_geojson, geo:wktLiteral) AS ?event_geom)
+          # get details JSON
+          BIND(iri(json:path(?event_json, "$.properties.detail")) AS ?detail_url)
+          ?detail_url url:text ?detail_txt .
+          BIND(strdt(?detail_txt, xsd:json) AS ?detail_json)
+          # get the shakemap
+          BIND(json:path(?detail_json, "$.properties.products.shakemap") AS ?shakemap_arr)
+          ?shakemap_arr json:unnest (?shakemap 0) .
+          # get MMI contures from shakemap
+          BIND(iri(json:path(?shakemap, "$.contents.['download/cont_mmi.json'].url"))
+            AS ?contures_url)
+          ?contures_url url:text ?contures_txt .
+          BIND(strdt(?contures_txt, xsd:json) AS ?contures_json_)
+          # remove CRS from GeoJSON
+          BIND(json:js("function (x) {delete x.crs; return x;}", ?contures_json_)
+            AS ?contures_json)
+          BIND(strdt(str(?contures_json), geo:geoJSONLiteral) AS ?contures_geojson)
+          BIND(spatialF:transformDatatype(?contures_geojson, geo:wktLiteral)
+            AS ?conture_geom)
+        } 
+      }
+      ?c spatial:withinBoxGeom(?conture_geom) .
+      ?c a coy:Company ;
+         geo:hasGeometry/geo:asWKT ?c_geom .
+    }
+  }
+} LIMIT 2000
