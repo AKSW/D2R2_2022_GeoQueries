@@ -1,0 +1,18 @@
+SELECT 
+?osm_id
+?geom
+WHERE {
+  SERVICE <https://query.wikidata.org/sparql> {
+    SELECT ?osm_id where {
+      ?s rdfs:label "Elbe"@de .
+      ?s wdt:P402 ?osm_id ;
+         wdt:P31 wd:Q4022 .
+    } LIMIT 1
+  } 
+  BIND(iri(concat("https://nominatim.openstreetmap.org/lookup?osm_ids=R",
+             ?osm_id, "&polygon_text=1&polygon_threshold=0.01&format=jsonv2"))
+    AS ?site) .
+  ?site url:text ?raw_result .
+  BIND(strdt(?raw_result, xsd:json) AS ?json_result) .
+  BIND(strdt(json:path(?json_result, "$[0].geotext"), geo:wktLiteral) AS ?geom) .
+} LIMIT 10
