@@ -1,0 +1,62 @@
+CONSTRUCT {
+  ?s
+    a coy:Port ;
+    a ?prtType ;
+    owl:sameAs ?locodeIri ;
+    coy:hasLocation ?country ;
+    ports:hasOperatingCountry ?opCountry ;
+    ports:hasLocationPrecision ?locprecision ;
+    ports:hasGeonamesId ?geonamesid ;
+    ports:hasLocode ?locode ;
+    ports:hasSize ?sizeClass ;
+    rdfs:label ?portname ;
+    coy:hasName ?portname ;
+    geo:hasGeometry ?geoNode ;
+    .
+  ?geoNode
+    a geo:Geometry ;
+    geo:asGML ?geoLitGml ;
+    geo:asWKT ?geoLitWkt ;
+    .
+  ?prtType
+    a rdfs:Class ;
+    rdfs:label ?prtTypeLabel ;
+    rdfs:subClassOf coy:Port ;
+    .
+  ?sizeClass
+    a rdfs:Class ;
+    a ports:SizeClass ;
+    rdfs:label ?sizeClassLabel ;
+    .
+}
+WHERE
+{
+  BIND(xml:parse(<env://INPUT>) AS ?xml1) .
+  ?xml1 xml:unnest ("/*[local-name()='FeatureCollection']/*[local-name()='member']/*" ?item) .
+  BIND(xml:path(?item, "/*/@gml:id") AS ?id) .
+  BIND(iri(concat(str(ns:), ?id)) AS ?s ) .
+  BIND(xml:path(?item, "/*/geonode:portname/text()") AS ?portname) .
+  BIND(xml:path(?item, "/*/geonode:code/text()") AS ?locode) .
+  BIND(iri(concat(str(ns:), 'locode/', ?locode)) AS ?locodeIri) .
+  BIND(xml:path(?item, "/*/geonode:iso3/text()") AS ?iso3_) .
+  BIND(iri(concat(str(country:), ?iso3_)) AS ?country) .
+  BIND(xml:path(?item, "/*/geonode:iso3_op/text()") AS ?iso3_op_) .
+  BIND(iri(concat(str(country:), ?iso3_op_)) AS ?opCountry) .
+  BIND(xml:path(?item, "/*/geonode:prttype/text()") AS ?prttype_) .
+  BIND(iri(concat(str(ports:), ?prttype)) AS ?prtType) .
+  BIND(concat(?prttype_, " Port") AS ?prtTypeLabel) .
+  BIND(xml:path(?item, "/*/geonode:prtsize/text()") AS ?prtsize__) .
+  BIND(if(?prtsize__ = "Unknown", coalesce(), ?prtsize__) AS ?prtsize_) .
+  BIND(iri(concat(str(ports:), "Size:", replace(?prtsize_, " ", "+"))) AS ?sizeClass) .
+  BIND(?prtsize_ AS ?sizeClassLabel) .
+  BIND(xml:path(?item, "/*/geonode:geonameid/text()") AS ?geonameid_) .
+  BIND(if(?geonameid_ = "999999999", coalesce(),
+                                     iri(concat(str(geonames:), ?geonameid_, "/")))
+       AS ?geonamesid) .
+  BIND(xml:path(?item, "/*/geonode:locprecision/text()") AS ?locprecision) .
+  BIND(xml:path(?item, "/*/*/*[namespace-uri()='http://www.opengis.net/gml/3.2']") AS ?geo_) .
+  BIND(spatialF:transformDatatype(spatialF:transformSRS(
+         strdt(str(?geo_), geo:gmlLiteral),
+         <http://www.opengis.net/def/crs/OGC/1.3/CRS84>), geo:wktLiteral) AS ?geoLitWkt) .
+  BIND(iri(concat(str(ns:), ?id, "/geometry")) AS ?geoNode ) .
+}
